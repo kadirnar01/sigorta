@@ -122,7 +122,16 @@
     font-family:var(--font);font-size:1rem;color:var(--text);background:#fff;transition:border-color .15s,box-shadow .15s}
   .field input:focus,.field select:focus{outline:0;border-color:var(--accent);
     box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 14%,transparent)}
-  .quote .note{font-size:.78rem;color:var(--muted-2);text-align:center;margin-top:12px}
+  .field.invalid input{border-color:#d92d20}
+  .field .err{display:none;color:#d92d20;font-size:.78rem;margin-top:5px;font-weight:600}
+  .field.invalid .err{display:block}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  #aracAlanlari[hidden]{display:none}
+  .consent{display:flex;gap:10px;align-items:flex-start;margin:4px 0 16px;font-size:.82rem;color:var(--muted);line-height:1.5}
+  .consent input{width:18px;height:18px;margin-top:2px;accent-color:var(--accent);flex:none;cursor:pointer}
+  .consent.invalid{color:#d92d20}
+  .quote .note{font-size:.75rem;color:var(--muted-2);text-align:center;margin-top:12px;line-height:1.55}
+  @media (max-width:520px){.form-row{grid-template-columns:1fr}}
 
   /* Stat kartları */
   .stats{background:var(--surface);padding-bottom:clamp(28px,5vw,52px)}
@@ -298,12 +307,12 @@
     <div class="quote reveal in" id="teklif">
       <h3>Ücretsiz Teklif Alın</h3>
       <p class="q-sub">30 saniyede bilgilerinizi bırakın, en uygun teklifi WhatsApp'tan gönderelim.</p>
-      <form id="teklifForm">
+      <form id="teklifForm" novalidate>
         <div class="field">
           <label for="tur">Sigorta Türü</label>
-          <select id="tur" required>
-            <option>Trafik Sigortası</option>
-            <option>Kasko</option>
+          <select id="tur">
+            <option data-arac="1">Trafik Sigortası</option>
+            <option data-arac="1">Kasko</option>
             <option>DASK (Zorunlu Deprem)</option>
             <option>Konut Sigortası</option>
             <option>Tamamlayıcı Sağlık Sigortası</option>
@@ -313,20 +322,60 @@
             <option>Seyahat Sağlık Sigortası</option>
           </select>
         </div>
-        <div class="field">
+
+        <div class="field" id="f-ad">
           <label for="ad">Ad Soyad</label>
-          <input id="ad" type="text" placeholder="Adınız Soyadınız" required>
+          <input id="ad" type="text" placeholder="Adınız Soyadınız" autocomplete="name">
+          <div class="err">Ad ve soyadınızı girin.</div>
         </div>
-        <div class="field">
+
+        <div class="form-row">
+          <div class="field" id="f-tc">
+            <label for="tc">T.C. Kimlik No</label>
+            <input id="tc" type="text" inputmode="numeric" maxlength="11" placeholder="11 haneli">
+            <div class="err">Geçerli bir T.C. kimlik no girin.</div>
+          </div>
+          <div class="field" id="f-dogum">
+            <label for="dogum">Doğum Tarihi</label>
+            <input id="dogum" type="date">
+            <div class="err">Doğum tarihinizi seçin.</div>
+          </div>
+        </div>
+
+        <div class="field" id="f-tel">
           <label for="tel">Telefon</label>
-          <input id="tel" type="tel" inputmode="tel" placeholder="05XX XXX XX XX" required>
+          <input id="tel" type="tel" inputmode="tel" placeholder="05XX XXX XX XX" autocomplete="tel">
+          <div class="err">Geçerli bir telefon numarası girin.</div>
         </div>
+
+        <div id="aracAlanlari">
+          <div class="form-row">
+            <div class="field" id="f-plaka">
+              <label for="plaka">Plaka</label>
+              <input id="plaka" type="text" placeholder="34 ABC 123" autocapitalize="characters">
+              <div class="err">Plakanızı girin.</div>
+            </div>
+            <div class="field" id="f-ruhsat">
+              <label for="ruhsat">Ruhsat Belge Seri No</label>
+              <input id="ruhsat" type="text" maxlength="9" placeholder="AB 123456" autocapitalize="characters">
+              <div class="err">Ruhsat seri no'yu girin (2 harf + 6 rakam).</div>
+            </div>
+          </div>
+        </div>
+
+        <label class="consent" id="f-kvkk">
+          <input type="checkbox" id="kvkk">
+          <span>Kişisel verilerimin <b>yalnızca teklif hazırlanması</b> amacıyla işlenmesine ve
+          benimle iletişime geçilmesine <b>açık rıza</b> veriyorum.</span>
+        </label>
+
         <button class="btn btn-wa btn-lg btn-block" type="submit">
           <svg width="20" height="20" aria-hidden="true"><use href="#wa-ico"/></svg>
           WhatsApp'tan Teklif Al
         </button>
       </form>
-      <p class="note">Bilgileriniz yalnızca teklif için kullanılır, üçüncü kişilerle paylaşılmaz.</p>
+      <p class="note">Bilgileriniz teklif dışında kullanılmaz, üçüncü kişilerle paylaşılmaz.
+      Form gönderildiğinde bilgiler WhatsApp üzerinden acenteye iletilir.</p>
     </div>
   </div>
 </section>
@@ -517,14 +566,66 @@
   burger&&burger.addEventListener('click',function(){document.body.classList.toggle('nav-open')});
   document.querySelectorAll('#navlinks a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('nav-open')})});
 
-  document.getElementById('teklifForm').addEventListener('submit',function(e){
+  var $=function(id){return document.getElementById(id)};
+  var turSec=$('tur'), aracKutu=$('aracAlanlari');
+
+  /* T.C. kimlik no algoritma doğrulaması (yanlış numarayı baştan yakalar) */
+  function tcGecerli(v){
+    if(!/^[1-9][0-9]{10}$/.test(v)) return false;
+    var d=v.split('').map(Number);
+    var tek=d[0]+d[2]+d[4]+d[6]+d[8], cift=d[1]+d[3]+d[5]+d[7];
+    if(((tek*7-cift)%10+10)%10 !== d[9]) return false;
+    var top=0; for(var i=0;i<10;i++) top+=d[i];
+    return top%10===d[10];
+  }
+  function aracMi(){
+    var o=turSec.options[turSec.selectedIndex];
+    return o && o.dataset.arac==='1';
+  }
+  function aracGoster(){ aracKutu.hidden=!aracMi(); }
+  turSec.addEventListener('change',aracGoster); aracGoster();
+
+  /* girdi temizleme */
+  $('tc').addEventListener('input',function(){this.value=this.value.replace(/\D/g,'')});
+  ['plaka','ruhsat'].forEach(function(id){
+    $(id).addEventListener('input',function(){this.value=this.value.toUpperCase()});
+  });
+
+  function hata(id,var_mi){ $('f-'+id).classList.toggle('invalid',var_mi); return !var_mi; }
+
+  $('teklifForm').addEventListener('submit',function(e){
     e.preventDefault();
-    var tur=document.getElementById('tur').value,
-        ad=document.getElementById('ad').value.trim(),
-        tel=document.getElementById('tel').value.trim();
-    if(!ad||!tel){return}
-    var msg='Merhaba, '+tur+' için teklif almak istiyorum.\n\nAd Soyad: '+ad+'\nTelefon: '+tel;
-    window.open('https://wa.me/905347246859?text='+encodeURIComponent(msg),'_blank');
+    var tur=turSec.value,
+        ad=$('ad').value.trim(),
+        tc=$('tc').value.trim(),
+        dogum=$('dogum').value,
+        tel=$('tel').value.trim(),
+        plaka=$('plaka').value.trim().replace(/\s+/g,' '),
+        ruhsat=$('ruhsat').value.trim().replace(/\s+/g,' '),
+        arac=aracMi(), ok=true;
+
+    ok &= hata('ad', ad.split(' ').filter(Boolean).length < 2);
+    ok &= hata('tc', !tcGecerli(tc));
+    ok &= hata('dogum', !dogum || new Date(dogum) >= new Date());
+    ok &= hata('tel', tel.replace(/\D/g,'').length < 10);
+    if(arac){
+      ok &= hata('plaka', !/^(0[1-9]|[1-7][0-9]|8[01])\s?[A-Z]{1,3}\s?\d{2,5}$/.test(plaka));
+      ok &= hata('ruhsat', !/^[A-Z]{2}\s?\d{6}$/.test(ruhsat));
+    }else{ hata('plaka',false); hata('ruhsat',false); }
+
+    var kvkk=$('kvkk').checked;
+    $('f-kvkk').classList.toggle('invalid',!kvkk);
+    ok &= kvkk;
+    if(!ok) return;
+
+    var g=dogum.split('-');                       // yyyy-mm-dd -> dd.mm.yyyy
+    var dogumTR=g[2]+'.'+g[1]+'.'+g[0];
+
+    var satir=['Merhaba, '+tur+' için teklif almak istiyorum.','',
+      'Ad Soyad: '+ad, 'T.C. Kimlik No: '+tc, 'Doğum Tarihi: '+dogumTR, 'Telefon: '+tel];
+    if(arac){ satir.push('Plaka: '+plaka, 'Ruhsat Belge Seri No: '+ruhsat); }
+
+    window.open('https://wa.me/905347246859?text='+encodeURIComponent(satir.join('\n')),'_blank');
   });
 
   if(!matchMedia('(prefers-reduced-motion:reduce)').matches){
